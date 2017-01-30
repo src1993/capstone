@@ -15,6 +15,4 @@ style= hier%>%
   group_by(STYLE_GROUP_IDNT, SUPP_COLOR)%>%
   summarize(n_style = n())%>%
   arrange(desc(n_style))
-
-
-gets
+ 1222
