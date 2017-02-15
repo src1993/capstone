@@ -9,12 +9,12 @@ library(ggplot2)
 
 #Read/load data
 
-#events <- read.csv('data/events.csv', as.is = T)
-#fiscal <- read.csv('data/fscl.csv', as.is = T)
-# hier <- read.csv('data/hier.csv')
-# catalog <- read.csv('data/pctlg_sku.csv', as.is = T)
-# load('data/price_type.rda')
-# tran <- read.csv('data/tran.csv', as.is = T)
+events <- read.csv('data/events.csv', as.is = T)
+fiscal <- read.csv('data/fscl.csv', as.is = T)
+hier <- read.csv('data/hier.csv')
+catalog <- read.csv('data/pctlg_sku.csv', as.is = T)
+load('data/price_type.rda')
+tran <- read.csv('data/tran.csv', as.is = T)
 
 #EVENTS
 
@@ -52,4 +52,24 @@ n_demand_none = sum(is.na(tran$UNITS))
 demand <- tran %>%
     filter(!is.na(UNITS)) %>%
     select(TRAN_DT, SKU_IDNT, UNITS, DEMAND)
+
+#Analyze demand
+
+demand_sku <- demand %>%
+    group_by(SKU_IDNT) %>%
+    summarize(total_units = n(), total_demand = sum(DEMAND))%>%
+    arrange(-total_units)
+
+summary(demand_sku)
+
+#Join transactions with catalog
+
+tran_cat <- demand %>%
+    inner_join(catalog, by = "SKU_IDNT") %>%
+    left_join(price_type, by = c("SKU_IDNT","DAY_DT"=="TRAN_DT"))
+
+tran_cat_color <- tran_cat %>%
+    group_by(SKU_IDNT) %>%
+    summarize(total_units = n(), total_demand = sum(DEMAND))%>%
+    arrange(-total_units)
 
