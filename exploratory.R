@@ -14,7 +14,7 @@ library(ggplot2)
 # hier <- read.csv('data/hier.csv')
 # catalog <- read.csv('data/pctlg_sku.csv', as.is = T)
 # load('data/price_type.rda')
-# tran <- read.csv('data/tran.csv')
+# tran <- read.csv('data/tran.csv', as.is = T)
 
 #EVENTS
 
@@ -38,6 +38,18 @@ catalog <- catalog %>%
     mutate(CRT_TMSTP = as.Date(CRT_TMSTP),
            RCD_UPDT_TMSTP = as.POSIXct(RCD_UPDT_TMSTP))
 
-#PRICE
+#TRANSACTIONS
 
+tran <- tran %>%
+    mutate(TRAN_DT = as.Date(TRAN_DT),
+           UNITS = as.numeric(UNITS),
+           DEMAND = as.numeric(DEMAND),
+           RTRN_UNITS = as.numeric(RTRN_UNITS),
+           RTRN_AMT = as.numeric(RTRN_AMT))
+
+n_demand_none = sum(is.na(tran$UNITS))
+
+demand <- tran %>%
+    filter(!is.na(UNITS)) %>%
+    select(TRAN_DT, SKU_IDNT, UNITS, DEMAND)
 

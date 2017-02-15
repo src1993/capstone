@@ -17,7 +17,6 @@ tran= data.frame(tran,stringsAsFactors = FALSE)
 
 str(tran)
 
-
 tran$DEMAND = gsub(",","",tran$DEMAND)
 tran$UNITS = gsub(",","",tran$UNITS)
 tran$RTRN_UNITS = gsub(",","",tran$RTRN_UNITS)
