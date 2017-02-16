@@ -61,9 +61,19 @@ tran <- tran %>%
 
 sum(is.na(tran$UNITS)) #n_demand_none 
 
+#Separate in demand and returns
+
+p <- tran%>%
+    mutate(UNITS+ RTRN_UNITS)%>%
+    arrange(-UNITS+ RTRN_UNITS)
+
 demand <- tran %>%
     filter(!is.na(UNITS)) %>%
-    select(DAY_DT, SKU_IDNT, UNITS, DEMAND) 
+    select(DAY_DT, SKU_IDNT, UNITS, DEMAND, UNIT_PRICE) 
+
+returns <- tran %>%
+    filter(!is.na(RTRN_UNITS)) %>%
+    select(DAY_DT, SKU_IDNT, UNITS, DEMAND, UNIT_PRICE) 
 
 #Analyze demand
 
@@ -73,6 +83,8 @@ demand_sku <- demand %>%
     arrange(-total_units)
 
 summary(demand_sku)
+
+#Demand by date
 
 demand_date <- demand %>%
     group_by(DAY_DT) %>% 
@@ -88,7 +100,7 @@ p <- ggplot(data = demand_date, aes(DAY_DT, total_units)) + geom_line() + xlab("
     scale_x_date(limits=start.end, date_breaks = "3 months", date_labels = "%b %Y")+
     ggtitle("Total sales over time ")
 
-p + geom_vline(data = subset(events, name %in% c("THANKSGIVING"),
+p + geom_vline(data = subset(events, name %in% c("THANKSGIVING")),
                aes(xintercept = as.numeric(start), colour = "blue")) +
     geom_vline(data = subset(events, name == "THANKSGIVING"),
                aes(xintercept = as.numeric(end), colour = "green"))
@@ -139,7 +151,8 @@ ggplot(data = demand_date, aes(1,total_demand)) + geom_boxplot()
 ggplot(data = demand_date, aes(total_demand)) + geom_histogram(bins=30)
 
 ggplot(data = demand_date_month, aes(DATE, total_units)) + geom_line()+
-    scale_x_yearmon()
+    scale_x_yearmon()+ylab('Total units')
+
 ggplot(data = demand_date_month, aes(DATE, total_demand)) + geom_line()+
     scale_x_yearmon()
 
@@ -149,10 +162,12 @@ ggplot(data = demand_date_month, aes(DATE, total_demand)) + geom_line()+
 tran_cat <- demand %>%
     inner_join(catalog, by = "SKU_IDNT") %>%
     select(-c(CRT_TMSTP, RCD_UPDT_TMSTP)) %>%
-    left_join(price_type)
+    left_join(price_type) 
 
-tran_cat_color <- tran_cat %>%
-    group_by(SKU_IDNT) %>%
-    summarize(total_units = n(), total_demand = sum(DEMAND))%>%
-    arrange(-total_units)
+tran_cat <- tran_cat %>%
+    mutate(PRICE_TYPE = ifelse(is.na(PRICE_TYPE),'REGULAR',PRICE_TYPE)) %>%
+    group_by(SKU_IDNT, PRICE_TYPE)%>%
+    summarize(total_units = sum(UNITS))
 
+tran_cat_hor <- tran_cat %>%
+    spread(PRICE_TYPE,total_units)

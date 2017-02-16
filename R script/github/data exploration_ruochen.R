@@ -35,7 +35,7 @@ for (i in 1:6){
 
 head(sku_top6)
 
-plot_top6= ggplot(sku_top6, aes(x=TRAN_DT, y=UNITS, group=ranking,colour=ranking)) +
+plot_top6= ggplot(sku_top6, aes(x=DAY_DT, y=UNITS, group=ranking,colour=ranking)) +
   scale_x_date(limits=start.end, date_breaks = "3 months", date_labels = "%b %Y")+
   geom_line() + xlab("Time") + ylab("Sales") +
   scale_color_brewer(palette="RdBu",direction = -1)+
