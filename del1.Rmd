@@ -1,0 +1,14 @@
+---
+title: "Exploratory Analysis"
+author: "Lorena Dominguez & Ruochen Sun"
+date: "February 16, 2017"
+output: html_notebook
+---
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r, include=FALSE}
+
+```
+
+

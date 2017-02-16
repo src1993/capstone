@@ -17,29 +17,21 @@ tran= data.frame(tran,stringsAsFactors = FALSE)
 
 str(tran)
 
-tran$DEMAND = gsub(",","",tran$DEMAND)
-tran$UNITS = gsub(",","",tran$UNITS)
-tran$RTRN_UNITS = gsub(",","",tran$RTRN_UNITS)
-tran$RTRN_AMT = gsub(",","",tran$RTRN_AMT)
+tran <- tran %>%
+    mutate(TRAN_DT = as.Date(TRAN_DT),
+           UNITS = as.numeric(UNITS),
+           DEMAND = as.numeric(DEMAND),
+           RTRN_UNITS = as.numeric(RTRN_UNITS),
+           RTRN_AMT = as.numeric(RTRN_AMT))
 
-tran$DEMAND= as.numeric(tran$DEMAND)
-tran$UNITS= as.numeric(tran$UNITS)
-tran$RTRN_AMT= as.numeric(tran$RTRN_AMT)
-tran$RTRN_UNITS= as.numeric(tran$RTRN_UNITS)
-tran$TRAN_DT= as.Date(tran$TRAN_DT)
-
-
-#"nil" is coered to "NA" when changing from "chr" to "numeric"
+#"nil" is coerced to "NA" when changing from "chr" to "numeric"
 tran%>%filter(is.na(UNITS))%>%
   summarize(n_demand_none=n())
 
-tran=data.frame(tran)
 # demand amount
 demand = tran %>%
-  filter(!is.na(UNITS) & !is.na(DEMAND))
-demand = demand %>%
-  select(TRAN_DT, SKU_IDNT, UNITS, DEMAND)
-demand = demand%>%
+  filter(!is.na(UNITS) & !is.na(DEMAND)) %>%
+  select(TRAN_DT, SKU_IDNT, UNITS, DEMAND) %>%
   mutate(tran_date = as.POSIXct(as.character(TRAN_DT),format= "%Y-%m-%d"),
          unit_price = (DEMAND/UNITS))%>%
   arrange(tran_date)
@@ -61,7 +53,7 @@ is.regular(z_d_amount, strict = TRUE)
 # should combine the "hierarchy.csv" to analyze further
 z_try=z_d_unit[, 1:2]
 
-plot(z_try, type = "b", lty = 1:2)
+plot(z_try, type = "l", lty = 1:2)
 
 z2= window(z_try[, 1], start = as.Date("2014-03-01"), end =as.Date("2016-03-01"))
 summary(z2)

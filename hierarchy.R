@@ -7,12 +7,12 @@ str(hier)
 brand_sale = demand%>%
   inner_join(hier, by='SKU_IDNT')%>%
   select(TRAN_DT,SKU_IDNT,UNITS, DEMAND,BRAND_NAME)
+
 brand_sale= brand_sale%>%
   group_by(BRAND_NAME)%>%
   summarize(sale_brand =sum(UNITS))%>%
   distinct()%>%
   arrange(desc(sale_brand))
-
 
 sku_brand= hier%>%
   group_by(BRAND_NAME)%>%

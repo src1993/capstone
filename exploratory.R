@@ -23,12 +23,14 @@ tran <- read.csv('data/tran.csv', as.is = T)
 #EVENTS
 
 events <- events %>%
-    mutate(start = as.Date(DT_BEG_ACT,
-           format = "%m/%d/%Y"),
+    mutate(name = EVENT_NM, 
+           start = as.Date(DT_BEG_ACT,
+                           format = "%m/%d/%Y"),
            end = as.Date(DT_END_ACT,
-           format = "%m/%d/%Y"),
-           duration = end-start+1) %>%
-    select(-c(DT_BEG_ACT,DT_END_ACT))
+                         format = "%m/%d/%Y"),
+           duration = end-start+1,
+           ym = as.yearmon(start)) %>%
+    select(-c(DT_BEG_ACT,DT_END_ACT,EVENT_NM, YR_454))
 
 #FISCAL
 
@@ -53,14 +55,15 @@ tran <- tran %>%
            UNITS = as.numeric(UNITS),
            DEMAND = as.numeric(DEMAND),
            RTRN_UNITS = as.numeric(RTRN_UNITS),
-           RTRN_AMT = as.numeric(RTRN_AMT)) %>%
+           RTRN_AMT = as.numeric(RTRN_AMT),
+           UNIT_PRICE = DEMAND/UNITS) %>%
     select(-TRAN_DT)
 
-n_demand_none = sum(is.na(tran$UNITS))
+sum(is.na(tran$UNITS)) #n_demand_none 
 
 demand <- tran %>%
     filter(!is.na(UNITS)) %>%
-    select(DAY_DT, SKU_IDNT, UNITS, DEMAND)
+    select(DAY_DT, SKU_IDNT, UNITS, DEMAND) 
 
 #Analyze demand
 
@@ -74,11 +77,49 @@ summary(demand_sku)
 demand_date <- demand %>%
     group_by(DAY_DT) %>% 
     summarize(total_units = sum(UNITS), total_demand = sum(DEMAND))%>%
-    arrange(-total_units)
+    arrange(DAY_DT) 
+
+startTime <- as.Date("2013-01-01")
+endTime <- as.Date("2017-02-01")
+# create a start and end time R object
+start.end <- c(startTime,endTime)
+
+p <- ggplot(data = demand_date, aes(DAY_DT, total_units)) + geom_line() + xlab("Time") + ylab("Sales")+
+    scale_x_date(limits=start.end, date_breaks = "3 months", date_labels = "%b %Y")+
+    ggtitle("Total sales over time ")
+
+p + geom_vline(data = subset(events, name %in% c("THANKSGIVING"),
+               aes(xintercept = as.numeric(start), colour = "blue")) +
+    geom_vline(data = subset(events, name == "THANKSGIVING"),
+               aes(xintercept = as.numeric(end), colour = "green"))
+                   
+demand_events <- demand_date%>%
+    mutate(ym = as.yearmon(DAY_DT)) %>%
+    left_join(events) %>%
+    mutate(event = ifelse(DAY_DT>= start & DAY_DT <= end,1,0)) %>%
+    filter(event == 1) %>%
+    group_by(name) %>%
+    summarize(total_units = sum(total_units),
+              total_demand = sum(total_demand),
+              duration = as.numeric(sum(duration))) %>%
+    mutate(units_per_day = total_units/duration,
+           demand_per_day = total_demand/duration)%>%
+    select(-duration) %>%
+    arrange(name)
+
+ggplot(data=demand_events, aes(factor(name),total_units))+
+    geom_bar(stat="identity")+coord_flip() + ylab('Event')+
+    xlab('Total units')+ggtitle('Units sold per day for special events')
+
+ggplot(data=demand_events, aes(factor(name),units_per_day))+
+    geom_bar(stat="identity")+coord_flip() + ylab('Event')+
+    xlab('Units per day')+ggtitle('Units sold per day for special events')
+
+#
   
 summary(demand_date)  
 
-ggplot(data = demand_date, aes(total_units)) + geom_histogram(bins=30)
+ggplot(data = demand_date, aes(total_units)) + geom_histogram(bins=15)
 ggplot(data = demand_date, aes(1,total_units)) + geom_boxplot()
 ggplot(data = demand_date, aes(1,total_demand)) + geom_boxplot()
 ggplot(data = demand_date, aes(total_demand)) + geom_histogram(bins=30)
