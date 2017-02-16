@@ -102,17 +102,12 @@ ggplot(data = demand_date_month, aes(DATE, total_units)) + geom_line()+
 ggplot(data = demand_date_month, aes(DATE, total_demand)) + geom_line()+
     scale_x_yearmon()
 
-demand_date_month_agg <- demand %>%
-    group_by(month = month(DAY_DT)) %>% 
-    summarize(total_units = mean(UNITS), total_demand = mean(DEMAND))%>%
-    arrange(month)
-
-
 
 #Join transactions with catalog
 
 tran_cat <- demand %>%
     inner_join(catalog, by = "SKU_IDNT") %>%
+    select(-c(CRT_TMSTP, RCD_UPDT_TMSTP)) %>%
     left_join(price_type)
 
 tran_cat_color <- tran_cat %>%
