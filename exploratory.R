@@ -13,7 +13,7 @@ library(lubridate)
 
 events <- read.csv('data/events.csv', as.is = T)
 fiscal <- read.csv('data/fscl.csv', as.is = T)
-hier <- read.csv('data/hier.csv')
+hier <- read.csv('data/hier.csv', as.is = T)
 catalog <- read.csv('data/pctlg_sku.csv', as.is = T)
 load('data/price_type.rda')
 tran <- read.csv('data/tran.csv', as.is = T)
@@ -29,13 +29,21 @@ events <- events %>%
            end = as.Date(DT_END_ACT,
                          format = "%m/%d/%Y"),
            duration = end-start+1,
-           ym = as.yearmon(start)) %>%
-    select(-c(DT_BEG_ACT,DT_END_ACT,EVENT_NM, YR_454))
+           year = YR_454) %>%
+    select(-c(DT_BEG_ACT,DT_END_ACT,EVENT_NM,YR_454))
 
 #FISCAL
 
 fiscal <- fiscal %>%
     mutate(DAY_DT = as.Date(DAY_DT)) 
+
+#HIERARCHY
+
+hier <- hier %>%
+    select(-c(DIV_IDNT,DIV_DESC,SKU_DESC,STYLE_DESC))
+
+table(hier$DM_RECD_CLOSE_DT)
+
 
 #CATALOG
 
@@ -171,3 +179,18 @@ tran_cat <- tran_cat %>%
 
 tran_cat_hor <- tran_cat %>%
     spread(PRICE_TYPE,total_units)
+
+
+#####
+
+color <- hier %>%
+    group_by(COLR_IDNT, COLR_DESC) %>%
+    summarize(tot = n()) %>%
+    arrange(-tot)
+
+prop.table(table(hier$SIZE_1_IDNT))
+    
+ggplot(color, aes(x=tot))+geom_histogram(bins=10)
+
+summary(color)
+    

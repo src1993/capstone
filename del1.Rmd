@@ -1,24 +1,43 @@
 ---
-title: "Exploratory Analysis"
+title: "Analytics Capstone"
 author: "Lorena Dominguez & Ruochen Sun"
-date: "February 16, 2017"
+date: "February 23, 2017"
 output:
-  html_document: default
   html_notebook: default
+  html_document: default
   pdf_document: default
 ---
 
-First step was to load and explore datasets. We started working on the transactions dataset. There is a total of 1570231 observations, although it includes sales and returns, so we have to subset the information. 
+```{r setup}
+print(getwd())
+knitr::opts_knit$set(root.dir = '/Users/loredp/Dropbox (MIT)/MIT/Capstone')
+print(getwd())
+
+```
+
+
+# Problem description
+
+This project aims to provide Nordstrom's buying teams with predictive models that inform both the selection breadth and depth at a category and supplier level for their online business. This will be executed through a series of steps that consist of:
+
+1. Initial exploratory data analysis
+2. Formulation of demand model
+3. Formulation of optimization model
+
+## Scope
+
+The project will be limited to women's handbags, although the analysis will be segmented into 2 departments/categories: Bridge and Contemporary.
+
+
+The project requires working with historical sales data to perform sales forecasting and create the selection model. Different statistical and machine learning techniques will be researched and explored to develop a demand prediction model. Finally, those clear and accessible data products will be applied in the final optimized selection strategy and assist the stakeholders in taking action on real business decisions.
 
 ```{r, include=FALSE}
-setwd("/Users/loredp/Dropbox (MIT)/MIT/Capstone")
-
 #Libraries
 library(dplyr)
 library(ggplot2)
 library(zoo)
 library(lubridate)
-events <- read.csv('data/events.csv', as.is = T)
+events <- read.csv('~/data/events.csv', as.is = T)
 fiscal <- read.csv('data/fscl.csv', as.is = T)
 hier <- read.csv('data/hier.csv')
 catalog <- read.csv('data/pctlg_sku.csv', as.is = T)
@@ -67,6 +86,22 @@ tran <- tran %>%
     select(-TRAN_DT)
 ```
 
+# Data
+
+Data has been shared via Dropbox and will be updated by the Nordstrom team on a continuous basis. Current available data will be used to build the demand model and consists on:
+1. Historical transactions: purchase and return transactions from 02/13 to 01/17
+
+
+2. Product hierarchy: product attributes such as color, brand, style, etc.
+3. Product catalog: Original price and color family for each product
+4. Price type: regular, clearance, anniversary, promotion
+5. Fiscal calendar
+6. Events calendar: includes special sales like Thanksgiving or Christmas
+Additional data around costs and optimization constraints required for the optimization model will be provided when the on-site internship starts. Any additional data that we deem necessary will be provided on-site as well.
+
+# Exploratory Analysis
+
+First step was to load and explore datasets. We started working on the transactions dataset. There is a total of 1570231 observations, although it includes sales and returns, so we have to subset the information. 
 
 
 ###Question 1: How to deal with returns?
@@ -125,6 +160,9 @@ ggplot(data=demand_events, aes(factor(name),total_units))+
     geom_bar(stat="identity")+coord_flip() + ylab('Event')+
     xlab('Total units')+ggtitle('Units sold per day for special events')
 
+
+```
+```{r}
 ggplot(data=demand_events, aes(factor(name),units_per_day))+
     geom_bar(stat="identity")+coord_flip() + ylab('Event')+
     xlab('Units per day')+ggtitle('Units sold per day for special events')
@@ -208,6 +246,10 @@ price_dpt <- catalog %>%
 ggplot(data = price_dpt, aes(factor(DEPT_DESC),ORIG_PRC_AMT))+geom_boxplot()
 ```
 
+### Further steps:
 
+1. Look at attributes (colors, size, department, base model)
+2. Focus on regular and promotion price
+3. Discount returns
 
 
