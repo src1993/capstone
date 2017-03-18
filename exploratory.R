@@ -10,8 +10,11 @@ library(zoo)
 library(lubridate)
 library(rpart)
 library(rpart.plot)
+library(sqldf)
+library(tidyr)
+library(qcc)
 
-#Read/load data
+####################################   Read/load data  ###############################################
 
 events <- read.csv('data/events.csv', as.is = T)
 fiscal <- read.csv('data/fscl.csv', as.is = T)
@@ -20,19 +23,19 @@ catalog <- read.csv('data/pctlg_sku.csv', as.is = T)
 load('data/price_type.rda')
 tran <- read.csv('data/tran.csv', as.is = T)
 
-#tran_backup <- tran
+####################################  Cleaning/wrangling  ###############################################
 
 #EVENTS
 
 events <- events %>%
-    mutate(name = EVENT_NM, 
+    mutate(EVENT = EVENT_NM, 
            start = as.Date(DT_BEG_ACT,
                            format = "%m/%d/%Y"),
            end = as.Date(DT_END_ACT,
                          format = "%m/%d/%Y"),
            duration = end-start+1,
            year = YR_454) %>%
-    select(-c(DT_BEG_ACT,DT_END_ACT,EVENT_NM,YR_454))
+    select(EVENT, start, end, duration, year)
 
 #FISCAL
 
@@ -42,13 +45,22 @@ fiscal <- fiscal %>%
 #HIERARCHY
 
 hier <- hier %>%
-    select(SKU_IDNT,SUPP_NAME, SUPP_NPG_CDE, BRAND_NAME, SBCLASS_DESC, SBCLASS_IDNT,
-           CLASS_DESC, CLASS_IDNT, DEPT_DESC, DEPT_IDNT)
+    mutate(N_BRAND = ifelse(SUPP_NPG_CDE==1,1,0),
+           LOAD_DT = as.Date(DM_RECD_LOAD_DT,
+                           format = "%Y-%m-%d"),
+           DEPT = as.factor(ifelse(DEPT_DESC=='CONTEMP HBG/SLG','Contemporary','Bridge')),
+           CLOSE_DT = pmin(as.Date(max(DM_RECD_LOAD_DT)),as.Date(DM_RECD_CLOSE_DT)),
+           LENGTH = as.numeric(CLOSE_DT-LOAD_DT+1)) %>%
+    select(SKU_IDNT,SUPP_NAME, SUPP_NAME, N_BRAND, BRAND_NAME,
+           CLASS_DESC, CLASS_IDNT, DEPT,LOAD_DT, CLOSE_DT, LENGTH)
 
 #CATALOG
 
 catalog <- catalog %>%
-    select(-c(CRT_TMSTP, RCD_UPDT_TMSTP))
+    mutate(ORIG_PRICE = ORIG_PRC_AMT,
+           COLOR = gsub("TONES","",CLR_FMLY_DESC),
+           CREATE_DT = as.Date(CRT_TMSTP)) %>%
+    select(SKU_IDNT, ORIG_PRICE, COLOR,CREATE_DT)
 
 #PRICE
 
@@ -57,24 +69,179 @@ price_type <- price_type %>%
 
 #TRANSACTIONS
 
-SKU <- unique(tran$SKU_IDNT)
-sum(!SKU %in% hier$SKU_IDNT) #all apear in hierarchy
-sum(!SKU %in% catalog$SKU_IDNT) #21 don't apear in hierarchy
-
 tran <- tran %>%
     mutate(DAY_DT = as.Date(TRAN_DT),
            UNITS = as.numeric(UNITS),
            DEMAND = as.numeric(DEMAND),
            RTRN_UNITS = as.numeric(RTRN_UNITS),
            RTRN_AMT = as.numeric(RTRN_AMT),
-           UNIT_PRICE_DEMAND = DEMAND/UNITS,
+           UNIT_PRICE_DEMAND =  ifelse(is.na(UNITS), 0, DEMAND/UNITS) ,
+           UNIT_PRICE_RETURN = ifelse(is.na(RTRN_UNITS), 0, -RTRN_AMT/RTRN_UNITS),
            UNIT_PRICE_RETURN = -RTRN_AMT/RTRN_UNITS) %>%
-    select(-TRAN_DT)
+    select(SKU_IDNT, DAY_DT, UNITS, DEMAND, UNIT_PRICE_DEMAND, RTRN_UNITS, RTRN_AMT,UNIT_PRICE_RETURN)
+tran[is.na(tran)] <- 0
+
+
+####################################  Create datasets ###############################################
+
+#Create data frame of dates
+
+DAY <- seq(as.Date(min(tran$DAY_DT)),as.Date(max(tran$DAY_DT)),by = "day")
+calendar <- data.frame(DAY = DAY, dummy = TRUE)
+
+day_events <- events %>% 
+    mutate(dummy=TRUE) %>%
+    right_join(calendar, by = "dummy") %>%
+    filter(DAY >=start, DAY<=end) %>%
+    select(DAY,EVENT)
 
 # Create product description
-
 description <- hier %>%
-    left_join(catalog, by = "SKU_IDNT")
+    full_join(catalog, by = "SKU_IDNT")
+
+demand <- tran %>%
+    subset(UNITS>=1) %>%
+    left_join(price_type, by = c("SKU_IDNT", "DAY_DT"))%>%
+    mutate(PRICE_TYPE = as.factor(ifelse(is.na(PRICE_TYPE),"REG",PRICE_TYPE)))%>%
+    left_join(description, by =c("SKU_IDNT")) %>% 
+    left_join(day_events, by = c("DAY_DT"="DAY")) %>%
+    mutate(EVENT = as.factor(ifelse(is.na(EVENT),"NONE",EVENT)))%>%
+    select(-c(RTRN_UNITS, RTRN_AMT, UNIT_PRICE_RETURN, CLASS_IDNT, LOAD_DT, CLOSE_DT, LENGTH, CREATE_DT))
+
+sku_length <- demand %>%
+    group_by(SKU_IDNT) %>%
+    summarise(start = min(DAY_DT),
+              end = max(DAY_DT)) %>%
+    mutate(length = end-start+1)
+
+save(demand, file = 'data/created/demand.Rdata')
+#################################### EXPLORATORY  ###############################################
+
+#Demand: eliminate returns
+
+demand_agg_date <- demand %>%
+    filter(PRICE_TYPE != 'CLRC') %>%  #filter clearance price
+    group_by(DAY_DT) %>%
+    summarise(TOTAL_UNITS = sum(UNITS),
+              TOTAL_DEMAND = sum(DEMAND))
+
+minD <- as.Date(min(tran$DAY_DT))
+maxD <- as.Date(max(tran$DAY_DT))
+    
+p1 <- ggplot(demand_agg_date) + geom_line(aes(x=DAY_DT, y=TOTAL_UNITS), colour='Dark Blue')+
+    xlab('')+ylab('Units')+
+    scale_x_date(limits=as.Date(c("2013-01-01","2017-03-01")), date_breaks = "4 months", date_labels = "%b %Y")+
+    ggtitle("Total Sales Over Time ")+
+    theme(
+        plot.title = element_text( size=14, face="bold",hjust=0.5),
+        axis.title.x = element_text(size=14, face="bold"),
+        axis.title.y = element_text( size=14, face="bold")
+    )
+p1 + geom_rect(data=events,aes(xmin=start, 
+                               xmax=end, ymin=0, ymax=max(demand_agg_date$TOTAL_UNITS),fill=EVENT),
+               alpha=0.3, na.rm = T)    
+
+demand_agg_date_aux <- demand_agg_date %>% 
+    mutate(year = year(DAY_DT)) %>%
+    filter(year< 2017) 
+year(demand_agg_date_aux$DAY_DT) <- 2000
+
+events_aux <- events 
+year(events_aux$start)<-year(events_aux$start)-events_aux$year+2000
+year(events_aux$end)<-year(events_aux$end)-events_aux$year+2000
+     
+p2 <- ggplot(demand_agg_date_aux) + geom_line(aes(x=DAY_DT, y=TOTAL_UNITS), colour='Dark Blue')+
+    xlab('')+ylab('Total Units')+
+    facet_grid(year~.)+
+    scale_x_date(limits=as.Date(c("2000-01-01","2000-12-31")), date_breaks = "1 months", date_labels = "%b")+
+    ggtitle("Total Sales Over Time ")+
+    theme(
+        plot.title = element_text( size=14, face="bold",hjust=0.5),
+        axis.title.x = element_text(size=14, face="bold"),
+        axis.title.y = element_text( size=14, face="bold"))+
+    ggtitle("Total Sales in Years ")
+
+p2 + geom_rect(data= subset(events_aux,year<2017),
+              aes(xmin=start, xmax=end, ymin=0, ymax=max(demand_agg_date$TOTAL_UNITS), 
+                  group=EVENT, fill=EVENT),alpha=0.3, na.rm = T)
+
+#Department
+
+demand_agg_date_dept <- demand %>%
+    filter(PRICE_TYPE != 'CLRC') %>%  #filter clearance price
+    group_by(DAY_DT, DEPT) %>%
+    summarise(TOTAL_UNITS = sum(UNITS),
+              TOTAL_DEMAND = sum(DEMAND))
+
+p3 <- ggplot(demand_agg_date_dept) + geom_line(aes(x=DAY_DT, y=TOTAL_UNITS,color=DEPT))+
+    xlab('')+ylab('Units')+guides(color=F)+
+    facet_grid(DEPT~.)+
+    scale_x_date(limits=as.Date(c("2013-01-01","2017-03-01")), date_breaks = "6 months", date_labels = "%b %Y")+
+    ggtitle("Total Sales Over Time by department")+
+    theme(
+        plot.title = element_text( size=14, face="bold",hjust=0.5),
+        axis.title.x = element_text(size=14, face="bold"),
+        axis.title.y = element_text( size=14, face="bold")
+    )
+p3
+
+### BAG attributes
+
+# COLOR
+
+demand_color <- demand %>%
+    group_by(COLOR) %>%
+    summarise(total_units = sum(UNITS)) 
+
+color.count <- demand_color$total_units
+names(color.count) <- demand_color$COLOR
+
+pareto.chart(color.count) 
+abline(h=(sum(color.count)*.8),col="blue",lwd=2)
+
+library(reshape2)
+dfm <- melt(color_total_sale[,c('color','total_unit','total_demand')],id.vars = 1)
+#####color with sale
+ggplot(dfm,aes(x = reorder(color,value),y = value)) + 
+    geom_bar(aes(fill = variable),position = "dodge",stat="identity")+
+    xlab("Color") + ylab("Amount of Sales")+
+    scale_y_continuous( sec.axis = sec_axis(~ . /100, name = "Units of sales"))+
+    ggtitle("Total Sales of Different Color ")+
+    guides(colour = guide_legend(title = NULL))+theme(
+        plot.title = element_text( size=14, face="bold",hjust=0.5),
+        axis.title.x = element_text(size=14, face="bold"),
+        axis.title.y = element_text( size=14, face="bold"),
+        axis.text.x = element_text(size = 10,  vjust = 0.5, hjust = 0.5, angle = 30),
+        legend.text = element_text( size = 10),
+        legend.justification=c(0.02,0.95), legend.position=c(0.02,0.95)
+    )
+
+
+
+
+####################################   ###############################################
+
+trial1$PRICE_TYPE <- ifelse(is.na(trial1$PRICE_TYPE),"REG",trial1$PRICE_TYPE)
+
+
+trial1 <- trial1 %>%
+    left_join(catalog, by = c("SKU_IDNT"))
+
+trial2 <- subset(trial1, UNIT_PRICE_DEMAND > ORIG_PRICE)
+
+
+
+
+####################################  Cleaning/wrangling  ###############################################
+
+
+headSKU <- unique(tran$SKU_IDNT)
+sum(!SKU %in% hier$SKU_IDNT) #all apear in hierarchy
+sum(!SKU %in% catalog$SKU_IDNT) #21 don't apear in hierarchy
+
+
+
+
 
 
 
