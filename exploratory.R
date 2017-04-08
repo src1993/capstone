@@ -108,16 +108,56 @@ demand <- tran %>%
     mutate(EVENT = as.factor(ifelse(is.na(EVENT),"NONE",EVENT)))%>%
     select(-c(RTRN_UNITS, RTRN_AMT, UNIT_PRICE_RETURN, CLASS_IDNT, LOAD_DT, CLOSE_DT, LENGTH, CREATE_DT))
 
+save(demand, file = 'data/created/demand.Rdata')
+save(description, file = 'data/created/information.Rdata')
+
 sku_length <- demand %>%
     group_by(SKU_IDNT) %>%
     summarise(start = min(DAY_DT),
               end = max(DAY_DT)) %>%
     mutate(length = end-start+1)
 
-save(demand, file = 'data/created/demand.Rdata')
+##
+
+sku_price <- demand %>%
+    group_by(SKU_IDNT) %>%
+    summarise(MIN_PRICE = min(UNIT_PRICE_DEMAND),
+              MAX_PRICE = max(UNIT_PRICE_DEMAND),
+              MEAN_PRICE = max(UNIT_PRICE_DEMAND),
+              ORIG_PRICE = mean(ORIG_PRICE)) %>%
+    mutate(MAX = pmax(MAX_PRICE,ORIG_PRICE))
+
+sum(sku_price$MAX_PRICE > sku_price$ORIG_PRICE) #456 cases where orig price is no the maximum price that shows up
+
+information <- description %>%
+    inner_join(sku_price, by = c("SKU_IDNT", "ORIG_PRICE"))
+
+
+## brand
+
+brand_info <- demand %>%
+    filter(PRICE_TYPE %in% c('PROMO','REG')) %>%
+    filter(DEPT == 'Bridge') %>% 
+    mutate(YEAR = year(DAY_DT)) %>%
+    filter(YEAR < 2017) %>%
+    group_by(BRAND_NAME, YEAR) %>%
+    summarise(TOT_UNITS = sum(UNITS),
+              START = min(DAY_DT),
+              END = max(DAY_DT))
+
+brand_info2 <- description %>%
+    filter(DEPT == 'Bridge') %>% 
+    group_by(BRAND_NAME) %>%
+    summarise(LOAD = min(LOAD_DT),
+              CLOSE = max(CLOSE_DT),
+              CREATE = min(CREATE_DT))
+
+brand_join <- brand_info %>%
+    left_join(brand_info2, by = "BRAND_NAME") %>%
+    mutate(length = as.numeric(END-START))
+
 #################################### EXPLORATORY  ###############################################
 
-#Demand: eliminate returns
 
 demand_agg_date <- demand %>%
     filter(PRICE_TYPE != 'CLRC') %>%  #filter clearance price
