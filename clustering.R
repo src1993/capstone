@@ -126,7 +126,11 @@ tree <- rpart(UNITS ~  N_BRAND + CLASS_DESC + EVENT + month(DAY_DT) + UNIT_PRICE
               data = bridge, method = 'anova', minsplit = 10000)
 rpart.plot(tree)
 
+tree2 <- rpart(UNITS ~  N_BRAND + CLASS_DESC + EVENT + month(DAY_DT) + UNIT_PRICE_DEMAND + COLOR + BRAND_NAME, 
+              data = bridge, method = 'anova', minsplit = 10000)
+rpart.plot(tree2)
 
+summary(tree)
 
 
 ########################
