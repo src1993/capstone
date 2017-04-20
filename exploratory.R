@@ -455,8 +455,6 @@ hier2 <- hier %>%
     mutate(aux = paste(SUPP_PRT_NBR, SUPP_COLOR, sep = "_")) %>%
     filter(aux !=CC)
 
-
-
 #### BRANDS ###
 
 sku_price <- demand %>%
