@@ -18,16 +18,34 @@ library(ggdendro)
 
 ####################################   Read/load data  ###############################################
 
-load('data/created/demand.Rdata')
+#Filter price_types
+
+# load('data/created/demand.Rdata')
+# demand <- demand %>%
+#     filter(PRICE_TYPE %in% c('PROMO','REG'))
+# 
+# bridge <- demand %>%
+#     filter(DEPT == 'Bridge') %>%
+#     select(-DEPT)
+# 
+# 
+# bridge <- bridge %>%
+#     left_join(fiscal, by = "DAY_DT") %>%
+#     arrange(DAY_DT, SKU_IDNT) %>%
+#     mutate(YEAR = YR_454) %>%
+#     select(-YR_454)
+# 
+# save(bridge, file = 'data/created/bridge.Rdata')
+
+load('data/created/bridge.Rdata')
 load('data/created/information.Rdata')
 
-#Filter price_types
-demand <- demand %>%
-    filter(PRICE_TYPE %in% c('PROMO','REG')) 
+fiscal <- read.csv("data/fscl.csv", as.is = T)
 
-bridge <- demand %>%
-    filter(DEPT == 'Bridge') %>%
-    select(-DEPT)
+fiscal <- fiscal %>%
+     mutate(DAY_DT = as.Date(DAY_DT),
+            YEAR = YR_454) %>%
+    select(-YR_454)
 
 ###### CREATE CLUSTERS FOR THE BRANDS  ######
 
@@ -35,46 +53,57 @@ bridge <- demand %>%
 
 #Time effects
 
+end_year <- fiscal %>%
+    group_by(YEAR) %>%
+    summarise(START_YEAR = min(DAY_DT))
+
 brand_time <- bridge %>%
-    group_by(BRAND_NAME,DAY_DT) %>%
+    group_by(BRAND_NAME,DAY_DT,YEAR) %>%
     summarise(UNITS = sum(UNITS)) %>%
-    mutate(YEAR = year(DAY_DT)) %>%
-    filter(YEAR < 2017) %>%
+    filter(between(YEAR, 2013, 2015)) %>%
     group_by(BRAND_NAME, YEAR) %>%
     summarise(UNITS = sum(UNITS),
-              START = min(DAY_DT),
-              END = max(DAY_DT),
-              ACTIVE_DAYS = n())
+              ACTIVE_DAYS = n(),
+              START_SALES = min(DAY_DT)) %>%
+    left_join(end_year, by = "YEAR") %>%
+    mutate(START = pmax(START_YEAR, START_SALES)) %>%
+    select(-c(START_YEAR, START_SALES))
 
 table(brand_time$YEAR)
 
 brand_color1 <- bridge %>%
-    mutate(YEAR = year(DAY_DT)) %>%
-    filter(YEAR < 2017) %>%
+    filter(between(YEAR, 2013, 2015)) %>%
     group_by(BRAND_NAME, YEAR, COLOR) %>%
-    summarise(freq = n())
+    summarise(freq = length(unique(SKU_IDNT)), popularity = n())
+
+brand_color2 <- brand_color1 %>%
+    group_by(BRAND_NAME, YEAR) %>%
+    summarize(tot_freq = sum(freq), tot_pop = sum(popularity))
 
 brand_color <- brand_color1 %>%
-    left_join(brand_time %>% select(BRAND_NAME, YEAR, UNITS),by = c("BRAND_NAME", "YEAR")) %>%
-    mutate(rel_freq = freq/UNITS) %>%
-    select(-c(freq,UNITS)) %>%
-    spread(COLOR,rel_freq)
+    left_join(brand_color2, by = c("BRAND_NAME", "YEAR")) %>%
+    mutate(rel_popularity = round(popularity/tot_pop,2),
+           rel_frequency = round(freq/tot_freq,2)) %>%
+    select(-c(freq,popularity, rel_frequency,tot_freq, tot_pop)) %>%
+    spread(COLOR,rel_popularity)
 
-brand_color[is.na(brand_color)] <- 0
+#rel_popularity and rel_frequency have a correlation of .94
+#we'll keep relative popularity since tells us more about selling patterns of a brand
+
+brand_color[is.na(brand_color)] <- -1
 
 brand_style1 <- bridge %>%
-    mutate(YEAR = year(DAY_DT)) %>%
-    filter(YEAR < 2017) %>%
+    filter(between(YEAR, 2013, 2015)) %>%
     group_by(BRAND_NAME, YEAR, CLASS_DESC ) %>%
-    summarise(freq = n()) 
+    summarise(freq = length(unique(SKU_IDNT)), pop = n()) 
 
 brand_style <- brand_style1 %>%
     left_join(brand_time %>% select(BRAND_NAME, YEAR, UNITS),by = c("BRAND_NAME", "YEAR")) %>%
-    mutate(rel_freq = freq/UNITS) %>%
-    select(-c(freq,UNITS)) %>%
-    spread(CLASS_DESC,rel_freq)
+    mutate(rel_pop = round(pop/UNITS,2)) %>%
+    select(-c(freq,pop,UNITS)) %>%
+    spread(CLASS_DESC,rel_pop)
 
-brand_style[is.na(brand_style)] <- 0
+brand_style[is.na(brand_style)] <- -1
 
 brand_info <- description %>%
     filter(DEPT == 'Bridge') %>% 
@@ -90,10 +119,12 @@ elapsed_months <- function(end_date, start_date) {
 
 brand <- brand_time %>%
     left_join(brand_info, by = "BRAND_NAME") %>%
-    mutate(seniority = elapsed_months(END, CREATE)) %>%
+    mutate(seniority = elapsed_months(START, CREATE)) %>%
     left_join(brand_color, by = c("BRAND_NAME", "YEAR")) %>%
     left_join(brand_style, by = c("BRAND_NAME", "YEAR")) %>%
-    select(-c(START,END,CREATE))
+    select(-c(START,CREATE))
+
+save(brand, file = "data/created/brand_info_bridge")
 
 ######    CLUSTERING    #######
 
@@ -113,15 +144,55 @@ tapply(brand$seniority,clusterGroups, mean)
 tapply(brand$SHOULDER,clusterGroups, mean)
 tapply(brand$ACTIVE_DAYS,clusterGroups, mean)
 
-brand$clust <-  clusterGroups
+brand$clust <-  as.factor(clusterGroups)
 
 ######   MODEL     #######
 
 bridge <- bridge %>% 
     mutate(YEAR = year(DAY_DT)) %>%
+    filter(YEAR < 2017) %>%
     left_join(brand %>% select(BRAND_NAME, YEAR, clust),by = c("BRAND_NAME", "YEAR"))
 
-control = rpart.control(cp = 0.01, minsplit = )
+#######
+
+#######
+experiment <- bridge %>%
+    group_by(clust, CLASS_DESC, COLOR) %>%
+    summarise(UNITS = sum(UNITS),
+              n = n())
+
+experiment_2 <- experiment %>%
+    group_by(clust) %>%
+    summarise(total = n(),
+              )
+
+ggplot(experiment, aes(x=clust, y = n, fill = clust))+geom_boxplot()+
+    coord_flip()+xlab('cluster')+ylab('observations')
+    
+experiment_date <- bridge %>%
+    mutate(DATE = as.yearmon(DAY_DT)) %>%
+    group_by(clust, CLASS_DESC, COLOR, DATE,EVENT) %>%
+    summarise(UNITS = sum(UNITS)) %>% 
+    mutate(UNIT = !is.na(UNITS)) %>%
+    spread(EVENT,UNIT)
+
+experiment_date[is.na(experiment_date)] <- 0
+
+names(experiment_date) <-gsub(" ","_",names(experiment_date))
+
+var <- names(experiment_date)
+var <- var[-c(1,2,3,5)]
+
+fmla <- as.formula(paste("UNITS ~ ", paste(var, collapse= "+")))
+
+#control = rpart.control(cp = 0.01, minsplit = )
+
+m1 <- lm(UNITS ~ month(DATE), data = experiment_date)
+
+tree <- rpart(UNITS ~  N_BRAND + CLASS_DESC + EVENT + month(DAY_DT) + UNIT_PRICE_DEMAND + COLOR + clust, 
+              data = bridge, method = 'anova', minsplit = 10000)
+
+###
 tree <- rpart(UNITS ~  N_BRAND + CLASS_DESC + EVENT + month(DAY_DT) + UNIT_PRICE_DEMAND + COLOR + clust, 
               data = bridge, method = 'anova', minsplit = 10000)
 rpart.plot(tree)
