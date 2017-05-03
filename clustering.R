@@ -82,7 +82,7 @@ brand_color2 <- brand_color1 %>%
 
 brand_color <- brand_color1 %>%
     left_join(brand_color2, by = c("BRAND_NAME", "YEAR")) %>%
-    mutate(rel_popularity = round(popularity/tot_pop,2),
+    mutate(rel_popularity = popularity/tot_pop,
            rel_frequency = round(freq/tot_freq,2)) %>%
     select(-c(freq,popularity, rel_frequency,tot_freq, tot_pop)) %>%
     spread(COLOR,rel_popularity)
@@ -90,7 +90,7 @@ brand_color <- brand_color1 %>%
 #rel_popularity and rel_frequency have a correlation of .94
 #we'll keep relative popularity since tells us more about selling patterns of a brand
 
-brand_color[is.na(brand_color)] <- -1
+brand_color[is.na(brand_color)] <- 0
 
 brand_style1 <- bridge %>%
     filter(between(YEAR, 2013, 2015)) %>%
@@ -99,11 +99,11 @@ brand_style1 <- bridge %>%
 
 brand_style <- brand_style1 %>%
     left_join(brand_time %>% select(BRAND_NAME, YEAR, UNITS),by = c("BRAND_NAME", "YEAR")) %>%
-    mutate(rel_pop = round(pop/UNITS,2)) %>%
+    mutate(rel_pop = pop/UNITS) %>%
     select(-c(freq,pop,UNITS)) %>%
     spread(CLASS_DESC,rel_pop)
 
-brand_style[is.na(brand_style)] <- -1
+brand_style[is.na(brand_style)] <- 0
 
 brand_info <- description %>%
     filter(DEPT == 'Bridge') %>% 
@@ -128,6 +128,8 @@ save(brand, file = "data/created/brand_info_bridge")
 
 ######    CLUSTERING    #######
 
+load("data/created/brand_info_bridge")
+
 preproc = preProcess(brand[-c(1:2)])
 brandNorm = predict(preproc, brand[-c(1:2)])
 summary(brandNorm)
@@ -146,14 +148,43 @@ tapply(brand$ACTIVE_DAYS,clusterGroups, mean)
 
 brand$clust <-  as.factor(clusterGroups)
 
+description <- description %>%
+    left_join(brand %>% select(BRAND_NAME, YEAR, clust)) 
+
+
 ######   MODEL     #######
 
-bridge <- bridge %>% 
-    mutate(YEAR = year(DAY_DT)) %>%
-    filter(YEAR < 2017) %>%
+train <- bridge %>% 
+    filter(between(YEAR, 2013, 2015)) %>%
     left_join(brand %>% select(BRAND_NAME, YEAR, clust),by = c("BRAND_NAME", "YEAR"))
 
-#######
+####
+
+SKU_2013 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2013)
+SKU_2014 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2014)
+SKU_2015 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2015)
+
+SKU_year <- rbind(SKU_2013, SKU_2014, SKU_2015)
+
+months <- fiscal %>%
+    filter(between(YEAR, 2013, 2015)) %>%
+    select(MTH_IDNT, YEAR) %>%
+    unique() %>%
+    arrange(YEAR, MTH_IDNT)
+
+SKU_time <- SKU_year %>%
+    left_join(months, by = "YEAR")
+
+agg_month <- train %>%
+    group_by(SKU_IDNT, MTH_IDNT, YEAR) %>%
+    summarise(UNITS = sum(UNITS))
+
+time_series <- SKU_time %>%
+    full_join(agg_month, by = c("SKU_IDNT", "YEAR", "MTH_IDNT"))
+
+time_series[is.na(time_series)] <- 0
+
+save(time_series, file = "data/created/time_series.Rdata")
 
 #######
 experiment <- bridge %>%
