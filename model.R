@@ -1,6 +1,9 @@
 #rm(list=ls())
 
+#Working directory
 setwd("/Users/loredp/Dropbox (MIT)/MIT/Capstone")
+
+#Load data sets
 load("data/created/time_series.Rdata")
 load("data/created/brand_info_bridge")
 load("data/created/information.Rdata")

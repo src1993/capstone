@@ -124,11 +124,8 @@ brand <- brand_time %>%
     left_join(brand_style, by = c("BRAND_NAME", "YEAR")) %>%
     select(-c(START,CREATE))
 
-save(brand, file = "data/created/brand_info_bridge")
 
 ######    CLUSTERING    #######
-
-load("data/created/brand_info_bridge")
 
 preproc = preProcess(brand[-c(1:2)])
 brandNorm = predict(preproc, brand[-c(1:2)])
@@ -148,8 +145,7 @@ tapply(brand$ACTIVE_DAYS,clusterGroups, mean)
 
 brand$clust <-  as.factor(clusterGroups)
 
-description <- description %>%
-    left_join(brand %>% select(BRAND_NAME, YEAR, clust)) 
+save(brand, file = "data/created/brand_info_bridge")
 
 
 ######   MODEL     #######
