@@ -15,27 +15,11 @@ library(tidyr)
 library(qcc)
 library(caret)
 library(ggdendro)
+library(factoextra)
+library(cluster)
+library(NbClust)
 
 ####################################   Read/load data  ###############################################
-
-#Filter price_types
-
-# load('data/created/demand.Rdata')
-# demand <- demand %>%
-#     filter(PRICE_TYPE %in% c('PROMO','REG'))
-# 
-# bridge <- demand %>%
-#     filter(DEPT == 'Bridge') %>%
-#     select(-DEPT)
-# 
-# 
-# bridge <- bridge %>%
-#     left_join(fiscal, by = "DAY_DT") %>%
-#     arrange(DAY_DT, SKU_IDNT) %>%
-#     mutate(YEAR = YR_454) %>%
-#     select(-YR_454)
-# 
-# save(bridge, file = 'data/created/bridge.Rdata')
 
 load('data/created/bridge.Rdata')
 load('data/created/information.Rdata')
@@ -68,8 +52,6 @@ brand_time <- bridge %>%
     left_join(end_year, by = "YEAR") %>%
     mutate(START = pmax(START_YEAR, START_SALES)) %>%
     select(-c(START_YEAR, START_SALES))
-
-table(brand_time$YEAR)
 
 brand_color1 <- bridge %>%
     filter(between(YEAR, 2013, 2015)) %>%
@@ -117,31 +99,59 @@ elapsed_months <- function(end_date, start_date) {
     12 * (ed$year - sd$year) + (ed$mon - sd$mon)
 }
 
+# Price bucket #
+
+b <- bridge %>% select(SKU_IDNT, BRAND_NAME, ORIG_PRICE, YEAR)
+
+b$bucket <- 1
+b$bucket[between(b$ORIG_PRICE,50.01,100)] <- 2
+b$bucket[between(b$ORIG_PRICE,100.01,150)] <- 3
+b$bucket[between(b$ORIG_PRICE,150.01,250)] <- 4
+b$bucket[between(b$ORIG_PRICE,250.01,350)] <- 5
+b$bucket[b$ORIG_PRICE > 350] <- 6
+
+b_prices <- b %>%
+    group_by(bucket)%>%
+    summarize(mean_price = mean(ORIG_PRICE))
+
+b <- b %>%
+    left_join(b_prices, by ="bucket")
+
+brand_buckets <- b %>%
+    group_by(BRAND_NAME, YEAR) %>%
+    summarize(bucket = mean(bucket),
+              price = mean(mean_price))
+
 brand <- brand_time %>%
     left_join(brand_info, by = "BRAND_NAME") %>%
     mutate(seniority = elapsed_months(START, CREATE)) %>%
-    left_join(brand_color, by = c("BRAND_NAME", "YEAR")) %>%
-    left_join(brand_style, by = c("BRAND_NAME", "YEAR")) %>%
+    left_join(brand_buckets, by = c("BRAND_NAME", "YEAR")) %>%
+    #left_join(brand_color, by = c("BRAND_NAME", "YEAR")) %>%
+    #left_join(brand_style, by = c("BRAND_NAME", "YEAR")) %>%
     select(-c(START,CREATE))
 
 
 ######    CLUSTERING    #######
 
-preproc = preProcess(brand[-c(1:2)])
-brandNorm = predict(preproc, brand[-c(1:2)])
-summary(brandNorm)
 
-d <- dist(brandNorm)
+dataScaled <- scale(brand[c(3:6)])
+d <- dist(dataScaled)
+
+d <- dist(dataScaled)
 clusters <- hclust(d, method = "ward.D")
-plot(clusters, hang = -1)
+fviz_nbclust(dataScaled, hcut, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)
+
+plot(clusters, labels = F, hang = -1)
 clusterGroups = cutree(clusters, k = 5)
-rect.hclust(clusters, k=5, border="red")
+rect.hclust(clusters, k=5, border=2:4)
 
 table(clusterGroups)
 tapply(brand$UNITS, clusterGroups, mean)
 tapply(brand$seniority,clusterGroups, mean)
 tapply(brand$SHOULDER,clusterGroups, mean)
 tapply(brand$ACTIVE_DAYS,clusterGroups, mean)
+tapply(brand$bucket,clusterGroups, mean)
 
 brand$clust <-  as.factor(clusterGroups)
 
