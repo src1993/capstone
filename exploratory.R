@@ -40,7 +40,9 @@ events <- events %>%
 #FISCAL
 
 fiscal <- fiscal %>%
-    mutate(DAY_DT = as.Date(DAY_DT)) 
+    mutate(DAY_DT = as.Date(DAY_DT),
+           YEAR = YR_454) %>%
+    select(-YR_454)
 
 #HIERARCHY
 
@@ -76,8 +78,8 @@ tran <- tran %>%
            RTRN_UNITS = as.numeric(RTRN_UNITS),
            RTRN_AMT = as.numeric(RTRN_AMT),
            UNIT_PRICE_DEMAND =  ifelse(is.na(UNITS), 0, DEMAND/UNITS) ,
-           UNIT_PRICE_RETURN = ifelse(is.na(RTRN_UNITS), 0, -RTRN_AMT/RTRN_UNITS),
-           UNIT_PRICE_RETURN = -RTRN_AMT/RTRN_UNITS) %>%
+           UNIT_PRICE_RETURN = ifelse(is.na(RTRN_UNITS), 0, -RTRN_AMT/RTRN_UNITS)
+           )%>%
     select(SKU_IDNT, DAY_DT, UNITS, DEMAND, UNIT_PRICE_DEMAND, RTRN_UNITS, RTRN_AMT,UNIT_PRICE_RETURN)
 tran[is.na(tran)] <- 0
 
@@ -111,13 +113,27 @@ demand <- tran %>%
 save(demand, file = 'data/created/demand.Rdata')
 save(description, file = 'data/created/information.Rdata')
 
+#Filter price_types
+
+demand <- demand %>%
+    filter(PRICE_TYPE %in% c('PROMO','REG'))
+
+bridge <- demand %>%
+    filter(DEPT == 'Bridge') %>%
+    left_join(fiscal, by = "DAY_DT") %>%
+    arrange(DAY_DT, SKU_IDNT)%>%
+    select(-DEPT)
+
+save(bridge, file = 'data/created/bridge.Rdata')
+
+#####################
+
+
 sku_length <- demand %>%
     group_by(SKU_IDNT) %>%
     summarise(start = min(DAY_DT),
               end = max(DAY_DT)) %>%
     mutate(length = end-start+1)
-
-##
 
 sku_price <- demand %>%
     group_by(SKU_IDNT) %>%
