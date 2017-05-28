@@ -133,6 +133,32 @@ contemporary <- demand %>%
 
 save(contemporary, file = 'data/created/contemporary.Rdata')
 
+### Time series ####
 
+SKU_2013 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2013)
+SKU_2014 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2014)
+SKU_2015 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2015)
+SKU_2016 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2016)
 
+SKU_year <- rbind(SKU_2013, SKU_2014, SKU_2015, SKU_2016)
 
+months <- fiscal %>%
+    filter(between(YEAR, 2013, 2016)) %>%
+    select(MTH_IDNT, YEAR) %>%
+    unique() %>%
+    arrange(YEAR, MTH_IDNT)
+
+SKU_time <- SKU_year %>%
+    left_join(months, by = "YEAR")
+
+agg_month <- bridge %>%
+    filter(between(YEAR, 2013,2016)) %>%
+    group_by(SKU_IDNT, MTH_IDNT, YEAR) %>%
+    summarise(UNITS = sum(UNITS))
+
+time_series_month <- SKU_time %>%
+    full_join(agg_month, by = c("SKU_IDNT", "YEAR", "MTH_IDNT"))
+
+time_series_month[is.na(time_series)] <- 0
+
+save(time_series_month, file = "data/created/time_series.Rdata")
