@@ -132,3 +132,7 @@ contemporary <- demand %>%
     arrange(DAY_DT, SKU_IDNT)
 
 save(contemporary, file = 'data/created/contemporary.Rdata')
+
+
+
+

@@ -3,6 +3,16 @@ library(dplyr)
 library(lubridate)
 
 #############        final brand cluster model
+
+#setwd("~/Dropbox (MIT)/MIT/Capstone")
+
+demand_all <- read.csv("data/created/demand_m1.csv", header = T, as.is = T)
+pctlg <- read.csv("data/pctlg_sku.csv")
+fs <- read.csv("data/fscl.csv")
+
+fs <- fs %>%
+    mutate(DAY_DT = as.Date(DAY_DT))
+
 demand_all=demand_all%>%filter(PRICE_TYPE!="ANNIV")
 demand_all$orig_p=round(demand_all$orig_p)
 
@@ -11,6 +21,7 @@ style_l=c( "t_baby","t_back","t_clutch","t_cross","t_hand","t_luggage","t_open",
            "t_pick","t_shoulder","t_small","t_tote","t_wallet" )
 
 style_split=split(demand_all,demand_all$style)
+
 #split by the cluster number s
 for (i in 1:12){
   assign(style_l[i],style_split[[i]])
@@ -18,6 +29,7 @@ for (i in 1:12){
 
 style_dataset=list(t_baby,t_back,t_clutch,t_cross,t_hand,t_luggage,t_open,
                    t_pick,t_shoulder,t_small,t_tote,t_wallet)
+
 price_fivenum=tapply(demand_all$orig_p,demand_all$style, fivenum)
 head(price_fivenum)
 
@@ -37,6 +49,7 @@ a10= c(0,30,50,70,100,400) #small 5
 a11= c(0,25,75,125,200,300,500,1250) #tote 9
 a12= c(0,30,50,100,150,200,300,500) #wallet 8
 price=list(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12)
+
 for(i in 1:12){
   a=price[[i]]
   l=length(price[[i]])-1
@@ -53,46 +66,32 @@ for (i in 1:12){
 price_df=rbind(t_baby,t_back,t_clutch,t_cross,t_hand,t_luggage,t_open,
          t_pick,t_shoulder,t_small,t_tote,t_wallet)
 
-price_df=data.frame(price_df)
-
 ######### brand sale
 start=price_df%>%select(SKU_IDNT,BRAND_NAME)%>%distinct()%>%
   left_join(pctlg,by="SKU_IDNT")%>%select(SKU_IDNT,BRAND_NAME,CRT_TMSTP)%>%
   mutate(create_time=as.Date(CRT_TMSTP))%>%
   group_by(BRAND_NAME)%>%
   summarise(DAY_DT=min(create_time))
-start=data.frame(start)
-
 
 brand_sale1=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME)%>%
   summarise(total_units=sum(UNITS))%>%left_join(start,by="BRAND_NAME")%>%
   mutate(t=ifelse(DAY_DT<as.Date("2013-02-01"),37,
                   as.numeric(difftime(as.Date("2016-12-31"),DAY_DT,units="days"))/30))
-brand_sale1=data.frame(brand_sale1)
 brand_sale1$t=round(brand_sale1$t)
 brand_sale1=brand_sale1%>%mutate(unit_month=total_units/t)%>%select(BRAND_NAME,unit_month)
-
 
 time = price_df%>%filter(year<2016)%>%select(year,month)%>%distinct()
 
 avg=merge(time,brand_sale1)
 avg=data.frame(avg)
 
-
-
 ######## slope difference
-
-start=price_df%>%select(SKU_IDNT,BRAND_NAME)%>%distinct()%>%
-  left_join(pctlg,by="SKU_IDNT")%>%select(SKU_IDNT,BRAND_NAME,CRT_TMSTP)%>%
-  mutate(create_time=as.Date(CRT_TMSTP))%>%
-  group_by(BRAND_NAME)%>%
-  summarise(DAY_DT=min(create_time))
-start=data.frame(start)
 
 start=start%>%
   left_join(fs, by="DAY_DT")%>%
   mutate(year_s=YR_454,week= WK_IDNT,month_s=MTH_IDNT )%>%
   select(BRAND_NAME,year_s,month_s)
+
 avg=avg%>%left_join(start,by="BRAND_NAME")
 
 
@@ -104,14 +103,11 @@ for(i in 1:nrow(avg)){
   }
 }
 
-
 avg=avg%>%mutate(time=paste(year,month,sep="_"))%>%
   select(BRAND_NAME,time,unit_month)%>%
   spread(time,unit_month)
 
-
 table(is.na(avg))
-
 
 brand_sale=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME,year,month)%>%
   summarise(total_units=sum(UNITS))%>%
@@ -121,17 +117,16 @@ brand_sale=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME,year,month)%>%
   mutate(difference=(total_units-unit_month))%>%
   select(BRAND_NAME,time,difference)%>%
   spread(time,difference)
-brand_sale=data.frame(brand_sale)
+
+
 table(is.na(brand_sale))
 
-
-for(i in 1:159){
-  for(j in 2:38){
+for(i in 1:nrow(brand_sale)){
+  for(j in 2:ncol(brand_sale)){
     brand_sale[i,j]=ifelse(is.na(brand_sale[i,j]),-avg[i,j], brand_sale[i,j])
   }
 }
 head(brand_sale)
-
 
 
 #### units difference on the time scale
@@ -140,17 +135,11 @@ brand_sale2=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME,year,month)%>%
   mutate(time=paste(year,month,sep="_"))%>%
   ungroup()%>%select(BRAND_NAME,time,total_units)%>%spread(time,total_units)
 
-
-
-
 brand=brand_sale%>%left_join(brand_sale2,by="BRAND_NAME")
 brand[is.na(brand)]=0
 
 
 #####brand color
-
-
-
 
 total=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME)%>%
   summarise(total_units=sum(UNITS))
@@ -158,8 +147,8 @@ total=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME)%>%
 brand_color=price_df%>%filter(year<2016)%>%group_by(BRAND_NAME,color)%>%summarise(units=sum(UNITS))%>%
   left_join(total,by="BRAND_NAME")%>%mutate(color_ratio=units/total_units)%>%
   select(BRAND_NAME,color,color_ratio)%>%spread(color,color_ratio)
-brand_color[is.na(brand_color)]=0
 
+brand_color[is.na(brand_color)]=0
 
 
 ####brand_style_price
@@ -195,7 +184,7 @@ t=data.frame(transformed)
 colnames(t)
 
 
-
+#
 for( i in 2:38){
   t[[i]]=t[[i]]/(37/194)
 }
