@@ -1,6 +1,3 @@
-df=rbind(t_baby,t_back,t_clutch,t_cross,t_hand,t_luggage,t_open,
-         t_pick,t_shoulder,t_small,t_tote,t_wallet)
-df=data.frame(df)
 price_df=read.csv("price_df.csv",header = TRUE,stringsAsFactors = FALSE)
 
 price_df=price_df%>%left_join(brand_c,by="BRAND_NAME")%>%
@@ -23,10 +20,6 @@ nrow(contem_df)
 
 #brand_contem_c3=brand_c
 #brand_contem_c4=brand_c
-
-
-
-
 
 
 
@@ -68,20 +61,6 @@ time=time%>%left_join(sale,by=c("year","week","IDNT"))
 time$units[is.na(time$units)]=0
 
 
-stamp=subset(pctlg,SKU_IDNT%in%df$SKU_IDNT)
-sku=df%>%select(SKU_IDNT,IDNT)%>%distinct()
-sku=sku%>%left_join(stamp,by="SKU_IDNT")%>%mutate(create=as.Date(CRT_TMSTP))%>%
-  group_by(IDNT)%>%summarise(create_time=min(create))%>%select(IDNT,create_time)
-
-
-create=sku%>%left_join(fs,by=c("create_time"="DAY_DT"))%>%
-  mutate(y=YR_454,w=WK_IDNT)%>%select(IDNT,y,w)
-time=time%>%left_join(create,by="IDNT")
-time[which(time$year==time$y & time$week<time$w),"create"]=0
-time[which(time$year<time$y ),"create"]=0
-time$create[is.na(time$create)]=1
-
-time=time%>%select(-c(y,w))%>%left_join(df_infor,by="IDNT")
 
 
 ###################  last year's sale
@@ -96,6 +75,7 @@ df_w=df_w%>%left_join(d,by=c("IDNT","year","week"))
 d1=df_w%>%select(year,week,IDNT,units)%>%rename(u1ag1_year=units)
 d1$week=d1$week+1
 d1$year=d1$year+1
+d1$year[which(d1$week==53)]=d1$year[which(d1$week==53)]+1
 d1$week[which(d1$week==53)]=1
 df_w=df_w%>%left_join(d1,by=c("IDNT","year","week"))
 
@@ -107,13 +87,6 @@ d2$week[which(d2$week==53)]=1
 df_w=df_w%>%left_join(d2,by=c("IDNT","year","week"))
 
 
-
-
-d3=d2%>%select(year,week,IDNT,u1ag2_year)%>%rename(u1ag3_year=u1ag2_year)
-d3$week=d3$week+1
-d3$year[which(d3$week==53)]=d3$year[which(d3$week==53)]+1
-d3$week[which(d3$week==53)]=1
-df_w=df_w%>%left_join(d3,by=c("IDNT","year","week"))
 
 
 d4=df_w%>%select(year,week,IDNT,units)%>%rename(uf1_year=units)
@@ -226,17 +199,7 @@ df_w[is.na(df_w)]=0
 
 
 
-################  holiday infor
 
-holiday=read.csv("us-federal-holidays-2011-2020.csv",header = TRUE,stringsAsFactors = FALSE)
-head(holiday)
-
-holiday$Date=as.Date(holiday$Date,format="%m/%d/%Y")
-holiday=holiday%>%left_join(fs,by=c("Date"="DAY_DT"))%>%
-  rename(year=YR_454,week=WK_IDNT)%>%select(Holiday,week,year)
-df_w=df_w%>%left_join(holiday,by=c("year","week"))
-df_w$Holiday[which(df_w$Holiday!="Labor Day")]="Other"
-df_w$Holiday[is.na(df_w$Holiday)]="No"
 
 ###################################
 df_w[is.na(df_w)]=0
