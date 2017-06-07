@@ -159,6 +159,30 @@ agg_month <- bridge %>%
 time_series_month <- SKU_time %>%
     full_join(agg_month, by = c("SKU_IDNT", "YEAR", "MTH_IDNT"))
 
-time_series_month[is.na(time_series)] <- 0
+time_series_month[is.na(time_series_month)] <- 0
 
 save(time_series_month, file = "data/created/time_series.Rdata")
+
+## Weekly
+
+
+weeks <- fiscal %>%
+    filter(between(YEAR, 2013, 2016)) %>%
+    select(WK_IDNT, YEAR) %>%
+    unique() %>%
+    arrange(YEAR, WK_IDNT)
+
+SKU_time <- SKU_year %>%
+    left_join(weeks, by = "YEAR")
+
+agg_week <- bridge %>%
+    filter(between(YEAR, 2013,2016)) %>%
+    group_by(SKU_IDNT, WK_IDNT, YEAR) %>%
+    summarise(UNITS = sum(UNITS))
+
+time_series_week <- SKU_time %>%
+    full_join(agg_week, by = c("SKU_IDNT", "YEAR", "WK_IDNT"))
+
+time_series_week[is.na(time_series_week)] <- 0
+
+save(time_series_week, file = "data/created/time_series_week.Rdata")
