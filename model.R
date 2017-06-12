@@ -161,8 +161,20 @@ model2 <- lm(UNITS ~ 0 + lagged_1 + lagged_2 + lagged_3 + lagged_4 +
                  as.factor(MTH_IDNT), data = subset(train, cluster == 2))
 summary(model2)
 
-model3 <- lm(UNITS ~ 0 + lagged_1 + lagged_2 + lagged_3 + lagged_4 , data = subset(train, cluster == 3))
+model3 <- lm(UNITS ~ 0 + lagged_1 + lagged_2 + lagged_3 + lagged_4 +
+                 as.factor(MTH_IDNT), data = subset(train, cluster == 3))
 summary(model3)
+
+#TREE#
+
+control <- rpart.control(minsplit = 150)
+tree.model3 <- rpart(UNITS ~ lagged_1 + lagged_2 + lagged_3 + lagged_4 +
+                 as.factor(MTH_IDNT), data = subset(train, cluster == 3),
+                 method = 'anova', control = control)
+summary(tree.model3)
+
+rpart.plot(tree.model3)
+
 
 #### PREDICTION ###
 
@@ -210,9 +222,6 @@ all <- rbind(test, train) %>%
 
 
 
-###
-
-
 
 control <- rpart.control(minsplit = 1500 )
 tree <- rpart(UNITS ~ lagged_1 + lagged_2 + lagged_3 + lagged_4 + 
@@ -229,5 +238,8 @@ model3 <- lm(MTH_IDNT ~ lagged_1 + lagged_2 + lagged_3 + lagged_4 +
                  CLASS_DESC + COLOR 
                  , data = subset(aux, clust == 3))
 summary(model2)
+
+#############
+
 
 

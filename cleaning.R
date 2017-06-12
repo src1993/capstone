@@ -108,6 +108,7 @@ demand <- tran %>%
     left_join(description, by =c("SKU_IDNT")) %>% 
     left_join(day_events, by = c("DAY_DT"="DAY")) %>%
     mutate(EVENT = as.factor(ifelse(is.na(EVENT),"NONE",EVENT)))%>%
+    left_join(fiscal, by = "DAY_DT") %>%
     select(-c(RTRN_UNITS, RTRN_AMT, UNIT_PRICE_RETURN, CLASS_IDNT, LOAD_DT, CLOSE_DT, LENGTH, CREATE_DT))
 
 save(demand, file = 'data/created/demand.Rdata')
@@ -121,47 +122,51 @@ demand <- demand %>%
 
 bridge <- demand %>%
     filter(DEPT == 'Bridge') %>%
-    left_join(fiscal, by = "DAY_DT") %>%
     arrange(DAY_DT, SKU_IDNT)
 
 save(bridge, file = 'data/created/bridge.Rdata')
 
 contemporary <- demand %>%
     filter(DEPT == 'Contemporary') %>%
-    left_join(fiscal, by = "DAY_DT") %>%
     arrange(DAY_DT, SKU_IDNT)
 
 save(contemporary, file = 'data/created/contemporary.Rdata')
 
-### Time series ####
+############# Time series #############
 
-SKU_2013 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2013)
-SKU_2014 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2014)
-SKU_2015 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2015)
-SKU_2016 <- data.frame(SKU_IDNT = unique(bridge$SKU_IDNT), YEAR = 2016)
+start_SKU <- demand %>% 
+    group_by(SKU_IDNT) %>% 
+    summarize(first = min(DAY_DT))%>%
+    left_join(description %>% select(SKU_IDNT, CREATE_DT, LOAD_DT), by = "SKU_IDNT") %>%
+    mutate(catalog = as.Date(ifelse(is.na(CREATE_DT), LOAD_DT,CREATE_DT)),
+           start = pmin(first, catalog)) %>%
+    left_join(fiscal, by = c("start" = "DAY_DT"))%>%
+    select(SKU_IDNT, DAY_IDNT, WK_IDNT, MTH_IDNT, YEAR)
 
-SKU_year <- rbind(SKU_2013, SKU_2014, SKU_2015, SKU_2016)
+#####  month ####
 
 months <- fiscal %>%
     filter(between(YEAR, 2013, 2016)) %>%
     select(MTH_IDNT, YEAR) %>%
     unique() %>%
-    arrange(YEAR, MTH_IDNT)
+    arrange(YEAR, MTH_IDNT) 
 
-SKU_time <- SKU_year %>%
-    left_join(months, by = "YEAR")
-
-agg_month <- bridge %>%
+agg_month <- demand %>%
     filter(between(YEAR, 2013,2016)) %>%
     group_by(SKU_IDNT, MTH_IDNT, YEAR) %>%
     summarise(UNITS = sum(UNITS))
 
-time_series_month <- SKU_time %>%
-    full_join(agg_month, by = c("SKU_IDNT", "YEAR", "MTH_IDNT"))
+time_series_month <- merge(months, start_SKU %>% select(SKU_IDNT)) %>%
+    left_join(agg_month, by = c("SKU_IDNT", "YEAR", "MTH_IDNT")) %>%
+    left_join(start_SKU, by = c("SKU_IDNT")) %>%
+    filter(YEAR.x*100+MTH_IDNT.x >= YEAR.y*100+MTH_IDNT.y) %>%
+    mutate(MTH_IDNT = MTH_IDNT.x,
+           YEAR = YEAR.x) %>%
+    select(SKU_IDNT, YEAR, MTH_IDNT, UNITS)
 
 time_series_month[is.na(time_series_month)] <- 0
 
-save(time_series_month, file = "data/created/time_series.Rdata")
+save(time_series_month, file = "data/created/time_series_month.Rdata")
 
 ## Weekly
 
